@@ -228,7 +228,7 @@ const agentStore: StateCreator<
               masterSnapshotId,
               run.status === 'completed'
                 ? `Agent execution completed: ${run.output || 'No output'}`.substring(0, 200)
-                : `Agent execution failed: ${run.error || 'Unknown error'}`.substring(0, 200)
+                : `Agent execution failed: ${run.status === 'failed' ? 'Agent failed' : 'Unknown error'}`.substring(0, 200)
             )
               .then((agentSnapshotId) => {
                 console.log('[Snapshots] Agent snapshot created with ID:', agentSnapshotId);

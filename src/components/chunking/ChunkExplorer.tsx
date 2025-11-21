@@ -9,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Database,
   Search,
-  Filter,
   RefreshCw,
   Play,
   FileCode,
@@ -225,7 +224,10 @@ export const ChunkExplorer: React.FC<ChunkExplorerProps> = ({
 
       {/* Main Content */}
       <div className="flex-1 min-h-0">
-        <Tabs defaultValue="chunks" className="h-full flex flex-col">
+        {(() => {
+          const [activeTab, setActiveTab] = useState('chunks');
+          return (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
           <TabsList>
             <TabsTrigger value="chunks">Chunks</TabsTrigger>
             <TabsTrigger value="business-rules">Business Rules</TabsTrigger>
@@ -263,6 +265,8 @@ export const ChunkExplorer: React.FC<ChunkExplorerProps> = ({
             <ChunkErrorViewer projectPath={currentProjectPath || undefined} />
           </TabsContent>
         </Tabs>
+          );
+        })()}
       </div>
     </div>
   );

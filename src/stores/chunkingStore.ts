@@ -83,12 +83,13 @@ interface ChunkingState {
   createMasterSnapshot: (
     projectPath: string,
     userMessage: string,
-    changedFiles: string[]
+    changedFiles?: string[]
   ) => Promise<void>;
   createAgentSnapshot: (
     projectPath: string,
+    masterSnapshotId: number,
     message: string,
-    changedFiles: string[]
+    changedFiles?: string[]
   ) => Promise<void>;
 
   // Actions - Errors
@@ -368,10 +369,10 @@ const chunkingStore: StateCreator<
   createMasterSnapshot: async (
     projectPath: string,
     userMessage: string,
-    changedFiles: string[]
+    _changedFiles?: string[]
   ) => {
     try {
-      await api.createMasterSnapshot(projectPath, userMessage, changedFiles);
+      await api.createMasterSnapshot(projectPath, userMessage);
       // Refresh snapshots
       await get().fetchSnapshots(projectPath, 'master');
     } catch (error) {
@@ -384,11 +385,12 @@ const chunkingStore: StateCreator<
   // Create agent snapshot
   createAgentSnapshot: async (
     projectPath: string,
+    masterSnapshotId: number,
     message: string,
-    changedFiles: string[]
+    changedFiles?: string[]
   ) => {
     try {
-      await api.createAgentSnapshot(projectPath, message, changedFiles);
+      await api.createAgentSnapshot(projectPath, masterSnapshotId, message, changedFiles);
       // Refresh snapshots
       await get().fetchSnapshots(projectPath, 'agent');
     } catch (error) {

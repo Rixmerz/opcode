@@ -16,6 +16,7 @@ interface SnapshotTimelineProps {
 export const SnapshotTimeline: React.FC<SnapshotTimelineProps> = ({ projectPath }) => {
   const { snapshots, isLoadingSnapshots, fetchSnapshots } = useChunkingStore();
   const [rewindingId, setRewindingId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState('master');
 
   useEffect(() => {
     if (projectPath) {
@@ -160,7 +161,7 @@ export const SnapshotTimeline: React.FC<SnapshotTimelineProps> = ({ projectPath 
   }
 
   return (
-    <Tabs defaultValue="master" className="h-full">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
       <TabsList>
         <TabsTrigger value="master" className="flex items-center gap-2">
           <User className="h-4 w-4" />

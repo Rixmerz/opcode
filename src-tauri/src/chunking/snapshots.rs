@@ -25,16 +25,18 @@ pub fn ensure_git_initialized(project_path: &str) -> Result<Repository> {
             let mut index = repo.index()?;
             index.write_tree()?
         };
-        let tree = repo.find_tree(tree_id)?;
 
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "chore: initialize opcode chunking system",
-            &tree,
-            &[],
-        )?;
+        {
+            let tree = repo.find_tree(tree_id)?;
+            repo.commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "chore: initialize opcode chunking system",
+                &tree,
+                &[],
+            )?;
+        }
 
         println!("[Chunking] Initialized Git repository at: {}", project_path);
         Ok(repo)

@@ -41,7 +41,7 @@ interface FloatingPromptInputProps {
   /**
    * Callback when prompt is sent
    */
-  onSend: (prompt: string, model: "sonnet" | "opus") => void;
+  onSend: (prompt: string, model: "haiku" | "sonnet" | "opus") => void;
   /**
    * Whether the input is loading
    */
@@ -53,7 +53,7 @@ interface FloatingPromptInputProps {
   /**
    * Default model to select
    */
-  defaultModel?: "sonnet" | "opus";
+  defaultModel?: "haiku" | "sonnet" | "opus";
   /**
    * Project path for file picker
    */
@@ -173,7 +173,7 @@ const ThinkingModeIndicator: React.FC<{ level: number; color?: string }> = ({ le
 };
 
 type Model = {
-  id: "sonnet" | "opus";
+  id: "haiku" | "sonnet" | "opus";
   name: string;
   description: string;
   icon: React.ReactNode;
@@ -182,6 +182,14 @@ type Model = {
 };
 
 const MODELS: Model[] = [
+  {
+    id: "haiku",
+    name: "Claude 4 Haiku",
+    description: "Fast and lightweight for quick tasks",
+    icon: <Zap className="h-3.5 w-3.5" />,
+    shortName: "H",
+    color: "text-primary"
+  },
   {
     id: "sonnet",
     name: "Claude 4 Sonnet",
@@ -225,7 +233,7 @@ const FloatingPromptInputInner = (
   ref: React.Ref<FloatingPromptInputRef>,
 ) => {
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState<"sonnet" | "opus">(defaultModel);
+  const [selectedModel, setSelectedModel] = useState<"haiku" | "sonnet" | "opus">(defaultModel);
   const [selectedThinkingMode, setSelectedThinkingMode] = useState<ThinkingMode>("auto");
   const [isExpanded, setIsExpanded] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);

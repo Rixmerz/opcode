@@ -169,15 +169,13 @@ impl ChunkingOrchestrator {
         &self,
         project_path: &str,
         user_message: &str,
-        changed_files: &[String],
-        parent_snapshot_id: Option<i64>,
+        _changed_files: &[String],
+        _parent_snapshot_id: Option<i64>,
     ) -> Result<i64> {
-        snapshots::create_master_snapshot(
+        snapshots::create_master_snapshot_with_git(
             &self.conn,
             project_path,
             user_message,
-            changed_files,
-            parent_snapshot_id,
         )
     }
 
@@ -187,15 +185,14 @@ impl ChunkingOrchestrator {
         project_path: &str,
         message: &str,
         changed_files: &[String],
-        parent_snapshot_id: Option<i64>,
+        master_snapshot_id: i64,
     ) -> Result<i64> {
-        snapshots::create_agent_snapshot(
+        snapshots::create_agent_snapshot_with_git(
             &self.conn,
             project_path,
+            master_snapshot_id,
             message,
-            changed_files,
-            parent_snapshot_id,
-            None,
+            Some(changed_files.to_vec()),
         )
     }
 
