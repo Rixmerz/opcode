@@ -1,5 +1,15 @@
 import { apiCall } from './apiAdapter';
 import type { HooksConfiguration } from '@/types/hooks';
+import type {
+  Chunk,
+  ChunkQuery,
+  ChunkingOptions,
+  ChunkingResult,
+  BusinessRule,
+  Snapshot,
+  SnapshotType,
+  ErrorLog,
+} from '@/types/chunking';
 
 /** Process type for tracking in ProcessRegistry */
 export type ProcessType = 
@@ -1938,6 +1948,261 @@ export const api = {
       return await apiCall<string>("slash_command_delete", { commandId, projectPath });
     } catch (error) {
       console.error("Failed to delete slash command:", error);
+      throw error;
+    }
+  },
+
+  // Chunking System API methods
+
+  /**
+   * Processes a project and generates all configured chunk types
+   * @param projectPath - Absolute path to the project
+   * @param options - Optional chunking configuration
+   * @returns Promise resolving to chunking result with statistics
+   */
+  async processProjectChunks(
+    projectPath: string,
+    options?: ChunkingOptions
+  ): Promise<ChunkingResult> {
+    try {
+      return await apiCall<ChunkingResult>("process_project_chunks", {
+        projectPath,
+        options
+      });
+    } catch (error) {
+      console.error("Failed to process project chunks:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Searches for chunks matching the specified criteria
+   * @param query - Search query with filters
+   * @returns Promise resolving to array of matching chunks
+   */
+  async searchChunks(query: ChunkQuery): Promise<Chunk[]> {
+    try {
+      return await apiCall<Chunk[]>("search_chunks", { query });
+    } catch (error) {
+      console.error("Failed to search chunks:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets business rules pending validation for a project
+   * @param projectPath - Absolute path to the project
+   * @returns Promise resolving to array of pending business rules
+   */
+  async getPendingBusinessRules(projectPath: string): Promise<BusinessRule[]> {
+    try {
+      return await apiCall<BusinessRule[]>("get_pending_business_rules", {
+        projectPath
+      });
+    } catch (error) {
+      console.error("Failed to get pending business rules:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Validates a business rule with user correction
+   * @param ruleId - ID of the business rule to validate
+   * @param ruleDescription - User-validated rule description
+   * @param userCorrection - Optional correction from user
+   * @returns Promise resolving when validation is complete
+   */
+  async validateBusinessRule(
+    ruleId: number,
+    ruleDescription: string,
+    userCorrection?: string
+  ): Promise<void> {
+    try {
+      return await apiCall<void>("validate_business_rule_command", {
+        ruleId,
+        ruleDescription,
+        userCorrection
+      });
+    } catch (error) {
+      console.error("Failed to validate business rule:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Proposes a new business rule for validation
+   * @param projectPath - Absolute path to the project
+   * @param entityName - Name of the entity (class/function/module)
+   * @param filePath - Path to the file containing the entity
+   * @param aiInterpretation - AI's interpretation of the business rule
+   * @returns Promise resolving to the new rule ID
+   */
+  async proposeBusinessRule(
+    projectPath: string,
+    entityName: string,
+    filePath: string,
+    aiInterpretation: string
+  ): Promise<number> {
+    try {
+      return await apiCall<number>("propose_business_rule_command", {
+        projectPath,
+        entityName,
+        filePath,
+        aiInterpretation
+      });
+    } catch (error) {
+      console.error("Failed to propose business rule:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets snapshots for a project
+   * @param projectPath - Absolute path to the project
+   * @param snapshotType - Optional filter by snapshot type ('master' or 'agent')
+   * @returns Promise resolving to array of snapshots
+   */
+  async getProjectSnapshots(
+    projectPath: string,
+    snapshotType?: SnapshotType
+  ): Promise<Snapshot[]> {
+    try {
+      return await apiCall<Snapshot[]>("get_project_snapshots", {
+        projectPath,
+        snapshotType
+      });
+    } catch (error) {
+      console.error("Failed to get project snapshots:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Creates a master snapshot (user intent timeline) with Git commit
+   * Automatically called BEFORE sending a message to the agent
+   * Version: V1, V2, V3, etc.
+   * @param projectPath - Absolute path to the project
+   * @param userMessage - User's message describing the intent
+   * @returns Promise resolving to the new snapshot ID
+   */
+  async createMasterSnapshot(
+    projectPath: string,
+    userMessage: string
+  ): Promise<number> {
+    try {
+      return await apiCall<number>("create_master_snapshot", {
+        projectPath,
+        userMessage
+      });
+    } catch (error) {
+      console.error("Failed to create master snapshot:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Creates an agent snapshot (agent execution timeline) with Git commit on parallel branch
+   * Automatically called AFTER an agent completes execution
+   * Version: V{master}.{agent} (e.g., V1.1, V1.2, V2.1)
+   * @param projectPath - Absolute path to the project
+   * @param masterSnapshotId - ID of the master snapshot this agent snapshot belongs to
+   * @param message - Description of the agent action
+   * @param changedFiles - Optional array of file paths that changed
+   * @returns Promise resolving to the new snapshot ID
+   */
+  async createAgentSnapshot(
+    projectPath: string,
+    masterSnapshotId: number,
+    message: string,
+    changedFiles?: string[]
+  ): Promise<number> {
+    try {
+      return await apiCall<number>("create_agent_snapshot", {
+        projectPath,
+        masterSnapshotId,
+        message,
+        changedFiles
+      });
+    } catch (error) {
+      console.error("Failed to create agent snapshot:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Rewinds the master branch to a previous snapshot (time travel)
+   * Uses git reset --hard and deletes subsequent master snapshots
+   * Preserves agent parallel branches
+   * @param snapshotId - ID of the snapshot to rewind to
+   * @returns Promise resolving when rewind is complete
+   */
+  async rewindMasterSnapshot(snapshotId: number): Promise<void> {
+    try {
+      return await apiCall<void>("rewind_master_snapshot", {
+        snapshotId
+      });
+    } catch (error) {
+      console.error("Failed to rewind master snapshot:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets active errors for a project
+   * @param projectPath - Absolute path to the project
+   * @returns Promise resolving to array of error logs
+   */
+  async getProjectErrors(projectPath: string): Promise<ErrorLog[]> {
+    try {
+      return await apiCall<ErrorLog[]>("get_project_errors", {
+        projectPath
+      });
+    } catch (error) {
+      console.error("Failed to get project errors:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Logs an error in the system
+   * @param projectPath - Absolute path to the project
+   * @param errorType - Type/category of the error
+   * @param message - Error message
+   * @param filePath - Optional path to file where error occurred
+   * @param stacktrace - Optional error stacktrace
+   * @returns Promise resolving to the new error log ID
+   */
+  async logError(
+    projectPath: string,
+    errorType: string,
+    message: string,
+    filePath?: string,
+    stacktrace?: string
+  ): Promise<number> {
+    try {
+      return await apiCall<number>("log_error_command", {
+        projectPath,
+        errorType,
+        message,
+        filePath,
+        stacktrace
+      });
+    } catch (error) {
+      console.error("Failed to log error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Marks an error as resolved
+   * @param errorId - ID of the error to resolve
+   * @returns Promise resolving when error is marked as resolved
+   */
+  async resolveError(errorId: number): Promise<void> {
+    try {
+      return await apiCall<void>("resolve_error_command", { errorId });
+    } catch (error) {
+      console.error("Failed to resolve error:", error);
       throw error;
     }
   },

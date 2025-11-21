@@ -24,6 +24,7 @@ interface UseTabStateReturn {
   createClaudeFileTab: (fileId: string, fileName: string) => string;
   createCreateAgentTab: () => string;
   createImportAgentTab: () => string;
+  createChunkingTab: (projectPath?: string) => string | null;
   closeTab: (id: string, force?: boolean) => Promise<boolean>;
   closeCurrentTab: () => Promise<boolean>;
   switchToTab: (id: string) => void;
@@ -188,6 +189,28 @@ export const useTabState = (): UseTabStateReturn => {
     });
   }, [addTab, tabs, setActiveTab]);
 
+  const createChunkingTab = useCallback((projectPath?: string): string | null => {
+    // Check if chunking tab already exists for this project path (singleton per project)
+    const existingTab = tabs.find(tab =>
+      tab.type === 'chunking' &&
+      (!projectPath || tab.initialProjectPath === projectPath)
+    );
+    if (existingTab) {
+      setActiveTab(existingTab.id);
+      return existingTab.id;
+    }
+
+    const projectName = projectPath ? projectPath.split('/').pop() || 'Project' : 'Project';
+    return addTab({
+      type: 'chunking',
+      title: `Chunks - ${projectName}`,
+      initialProjectPath: projectPath,
+      status: 'idle',
+      hasUnsavedChanges: false,
+      icon: 'database'
+    });
+  }, [addTab, tabs, setActiveTab]);
+
   const createClaudeFileTab = useCallback((fileId: string, fileName: string): string => {
     // Check if tab already exists for this file
     const existingTab = tabs.find(tab => tab.type === 'claude-file' && tab.claudeFileId === fileId);
@@ -344,6 +367,7 @@ export const useTabState = (): UseTabStateReturn => {
     createClaudeFileTab,
     createCreateAgentTab,
     createImportAgentTab,
+    createChunkingTab,
     closeTab,
     closeCurrentTab,
     switchToTab: setActiveTab,
