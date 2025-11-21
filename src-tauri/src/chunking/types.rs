@@ -137,7 +137,7 @@ pub struct BusinessRule {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Snapshot del proyecto (Git virtual interno)
+/// Snapshot del proyecto (Git real con versionado)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Snapshot {
     pub id: Option<i64>,
@@ -149,6 +149,14 @@ pub struct Snapshot {
     pub changed_files: String,        // JSON array de archivos modificados
     pub diff_summary: Option<String>, // Resumen de cambios
     pub metadata: Option<String>,     // JSON con metadata adicional
+
+    // Git integration fields
+    pub git_commit_hash: Option<String>, // Hash del commit real de Git
+    pub git_tag: Option<String>,         // Tag de versión (V1, V2, V3 o V1.1, V1.2)
+    pub git_branch: Option<String>,      // Rama (main para master, agent/v1.1 para agent)
+    pub version_major: i32,              // Número de versión principal (1, 2, 3...)
+    pub version_minor: Option<i32>,      // Número de versión secundaria (solo para agent: 1, 2, 3...)
+
     pub created_at: DateTime<Utc>,
 }
 

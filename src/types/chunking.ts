@@ -72,6 +72,14 @@ export interface Snapshot {
   changed_files: string; // JSON array
   diff_summary?: string;
   metadata?: string;
+
+  // Git integration fields
+  git_commit_hash?: string; // Hash del commit real de Git
+  git_tag?: string;         // Tag de versión (V1, V2, V3 o V1.1, V1.2)
+  git_branch?: string;      // Rama (main para master, agent/v1.1 para agent)
+  version_major: number;    // Número de versión principal (1, 2, 3...)
+  version_minor?: number;   // Número de versión secundaria (solo para agent: 1, 2, 3...)
+
   created_at: string;
 }
 

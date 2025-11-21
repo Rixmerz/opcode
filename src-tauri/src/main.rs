@@ -46,7 +46,7 @@ use commands::chunking::{
     create_agent_snapshot, create_master_snapshot, get_pending_business_rules,
     get_project_errors, get_project_snapshots, init_chunking_system, log_error_command,
     process_project_chunks, propose_business_rule_command, resolve_error_command,
-    search_chunks, validate_business_rule_command, ChunkingState,
+    rewind_master_snapshot, search_chunks, validate_business_rule_command, ChunkingState,
 };
 use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
@@ -311,6 +311,7 @@ fn main() {
             resolve_error_command,
             create_master_snapshot,
             create_agent_snapshot,
+            rewind_master_snapshot,
             propose_business_rule_command,
             log_error_command,
         ])

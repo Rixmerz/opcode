@@ -2078,25 +2078,21 @@ export const api = {
   },
 
   /**
-   * Creates a master snapshot (user intent timeline)
+   * Creates a master snapshot (user intent timeline) with Git commit
+   * Automatically called BEFORE sending a message to the agent
+   * Version: V1, V2, V3, etc.
    * @param projectPath - Absolute path to the project
    * @param userMessage - User's message describing the intent
-   * @param changedFiles - Array of file paths that changed
-   * @param parentSnapshotId - Optional parent snapshot ID
    * @returns Promise resolving to the new snapshot ID
    */
   async createMasterSnapshot(
     projectPath: string,
-    userMessage: string,
-    changedFiles: string[],
-    parentSnapshotId?: number
+    userMessage: string
   ): Promise<number> {
     try {
       return await apiCall<number>("create_master_snapshot", {
         projectPath,
-        userMessage,
-        changedFiles,
-        parentSnapshotId
+        userMessage
       });
     } catch (error) {
       console.error("Failed to create master snapshot:", error);
@@ -2105,28 +2101,48 @@ export const api = {
   },
 
   /**
-   * Creates an agent snapshot (agent execution timeline)
+   * Creates an agent snapshot (agent execution timeline) with Git commit on parallel branch
+   * Automatically called AFTER an agent completes execution
+   * Version: V{master}.{agent} (e.g., V1.1, V1.2, V2.1)
    * @param projectPath - Absolute path to the project
+   * @param masterSnapshotId - ID of the master snapshot this agent snapshot belongs to
    * @param message - Description of the agent action
-   * @param changedFiles - Array of file paths that changed
-   * @param parentSnapshotId - Optional parent snapshot ID
+   * @param changedFiles - Optional array of file paths that changed
    * @returns Promise resolving to the new snapshot ID
    */
   async createAgentSnapshot(
     projectPath: string,
+    masterSnapshotId: number,
     message: string,
-    changedFiles: string[],
-    parentSnapshotId?: number
+    changedFiles?: string[]
   ): Promise<number> {
     try {
       return await apiCall<number>("create_agent_snapshot", {
         projectPath,
+        masterSnapshotId,
         message,
-        changedFiles,
-        parentSnapshotId
+        changedFiles
       });
     } catch (error) {
       console.error("Failed to create agent snapshot:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Rewinds the master branch to a previous snapshot (time travel)
+   * Uses git reset --hard and deletes subsequent master snapshots
+   * Preserves agent parallel branches
+   * @param snapshotId - ID of the snapshot to rewind to
+   * @returns Promise resolving when rewind is complete
+   */
+  async rewindMasterSnapshot(snapshotId: number): Promise<void> {
+    try {
+      return await apiCall<void>("rewind_master_snapshot", {
+        snapshotId
+      });
+    } catch (error) {
+      console.error("Failed to rewind master snapshot:", error);
       throw error;
     }
   },

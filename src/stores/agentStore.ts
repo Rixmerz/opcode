@@ -106,18 +106,37 @@ const agentStore: StateCreator<
     // Create a new agent run
     createAgentRun: async (data: { agentId: number; projectPath: string; task: string; model?: string }) => {
       try {
+        // STEP 1: Create master snapshot BEFORE executing agent
+        console.log('[Snapshots] Creating master snapshot before agent execution...');
+        let masterSnapshotId: number | undefined;
+        try {
+          masterSnapshotId = await api.createMasterSnapshot(data.projectPath, data.task);
+          console.log('[Snapshots] Master snapshot created with ID:', masterSnapshotId);
+        } catch (snapshotError) {
+          console.warn('[Snapshots] Failed to create master snapshot:', snapshotError);
+          // Continue with agent execution even if snapshot fails
+        }
+
+        // STEP 2: Execute the agent
         const runId = await api.executeAgent(data.agentId, data.projectPath, data.task, data.model);
-        
+
         // Fetch the created run details
         const run = await api.getAgentRun(runId);
-        
+
+        // Store the master snapshot ID in local state for later use
+        // We'll use this to create the agent snapshot when the run completes
+        const runWithSnapshot = {
+          ...run,
+          _masterSnapshotId: masterSnapshotId, // Internal field for tracking
+        };
+
         // Update local state immediately
         set((state) => ({
-          agentRuns: [run, ...state.agentRuns],
+          agentRuns: [runWithSnapshot as any, ...state.agentRuns],
           runningAgents: new Set([...state.runningAgents, runId.toString()])
         }));
-        
-        return run;
+
+        return runWithSnapshot;
       } catch (error) {
         set({
           error: error instanceof Error ? error.message : 'Failed to create agent run'
@@ -186,18 +205,47 @@ const agentStore: StateCreator<
       set((state) => {
         const existingIndex = state.agentRuns.findIndex((r) => r.id === run.id);
         const updatedRuns = [...state.agentRuns];
-        
+
+        // Check if agent just completed (transition from running/pending to completed/failed)
+        const previousRun = existingIndex >= 0 ? updatedRuns[existingIndex] : null;
+        const wasRunning = previousRun && (previousRun.status === 'running' || previousRun.status === 'pending');
+        const justCompleted = wasRunning && (run.status === 'completed' || run.status === 'failed');
+
         if (existingIndex >= 0) {
           updatedRuns[existingIndex] = run;
         } else {
           updatedRuns.unshift(run);
         }
-        
+
+        // STEP 3: Create agent snapshot AFTER agent completes
+        if (justCompleted && run.id && run.project_path) {
+          const masterSnapshotId = (previousRun as any)?._masterSnapshotId;
+
+          if (masterSnapshotId) {
+            console.log('[Snapshots] Agent completed, creating agent snapshot...');
+            api.createAgentSnapshot(
+              run.project_path,
+              masterSnapshotId,
+              run.status === 'completed'
+                ? `Agent execution completed: ${run.output || 'No output'}`.substring(0, 200)
+                : `Agent execution failed: ${run.error || 'Unknown error'}`.substring(0, 200)
+            )
+              .then((agentSnapshotId) => {
+                console.log('[Snapshots] Agent snapshot created with ID:', agentSnapshotId);
+              })
+              .catch((error) => {
+                console.warn('[Snapshots] Failed to create agent snapshot:', error);
+              });
+          } else {
+            console.warn('[Snapshots] Agent completed but no master snapshot ID found');
+          }
+        }
+
         const runningIds = updatedRuns
           .filter((r) => r.status === 'running' || r.status === 'pending')
           .map((r) => r.id?.toString() || '')
           .filter(Boolean);
-        
+
         return {
           agentRuns: updatedRuns,
           runningAgents: new Set(runningIds)

@@ -100,7 +100,7 @@ pub fn init_chunk_database(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
 
-    // Tabla de snapshots (git virtual)
+    // Tabla de snapshots (git real con versionado)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,11 +112,23 @@ pub fn init_chunk_database(conn: &Connection) -> SqliteResult<()> {
             changed_files TEXT NOT NULL,
             diff_summary TEXT,
             metadata TEXT,
+            git_commit_hash TEXT,
+            git_tag TEXT,
+            git_branch TEXT,
+            version_major INTEGER NOT NULL DEFAULT 1,
+            version_minor INTEGER,
             created_at TEXT NOT NULL,
             FOREIGN KEY (parent_snapshot_id) REFERENCES snapshots(id) ON DELETE SET NULL
         )",
         [],
     )?;
+
+    // Migrations: Add Git fields if they don't exist (for existing databases)
+    let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN git_commit_hash TEXT", []);
+    let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN git_tag TEXT", []);
+    let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN git_branch TEXT", []);
+    let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN version_major INTEGER NOT NULL DEFAULT 1", []);
+    let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN version_minor INTEGER", []);
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_path)",
@@ -128,6 +140,10 @@ pub fn init_chunk_database(conn: &Connection) -> SqliteResult<()> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_parent ON snapshots(parent_snapshot_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_version ON snapshots(version_major, version_minor)",
         [],
     )?;
 
@@ -407,13 +423,13 @@ pub fn get_business_rules(conn: &Connection, project_path: &str) -> Result<Vec<B
     Ok(rules)
 }
 
-/// Crea un snapshot
+/// Crea un snapshot con información Git
 pub fn create_snapshot(conn: &Connection, snapshot: &Snapshot) -> Result<i64> {
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO snapshots (project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO snapshots (project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, git_commit_hash, git_tag, git_branch, version_major, version_minor, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             &snapshot.project_path,
             snapshot.snapshot_type.as_str(),
@@ -423,6 +439,11 @@ pub fn create_snapshot(conn: &Connection, snapshot: &Snapshot) -> Result<i64> {
             &snapshot.changed_files,
             &snapshot.diff_summary,
             &snapshot.metadata,
+            &snapshot.git_commit_hash,
+            &snapshot.git_tag,
+            &snapshot.git_branch,
+            snapshot.version_major,
+            snapshot.version_minor,
             &now,
         ],
     )?;
@@ -437,14 +458,14 @@ pub fn get_snapshots(
 ) -> Result<Vec<Snapshot>> {
     let (sql, has_type_filter) = if let Some(st) = snapshot_type {
         (
-            "SELECT id, project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, created_at
-             FROM snapshots WHERE project_path = ?1 AND snapshot_type = ?2 ORDER BY created_at DESC",
+            "SELECT id, project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, git_commit_hash, git_tag, git_branch, version_major, version_minor, created_at
+             FROM snapshots WHERE project_path = ?1 AND snapshot_type = ?2 ORDER BY version_major DESC, version_minor DESC, created_at DESC",
             Some(st),
         )
     } else {
         (
-            "SELECT id, project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, created_at
-             FROM snapshots WHERE project_path = ?1 ORDER BY created_at DESC",
+            "SELECT id, project_path, snapshot_type, parent_snapshot_id, message, user_message, changed_files, diff_summary, metadata, git_commit_hash, git_tag, git_branch, version_major, version_minor, created_at
+             FROM snapshots WHERE project_path = ?1 ORDER BY version_major DESC, version_minor DESC, created_at DESC",
             None,
         )
     };
@@ -465,7 +486,7 @@ pub fn get_snapshots(
 
 fn parse_snapshot_row(row: &rusqlite::Row) -> SqliteResult<Snapshot> {
     let snapshot_type_str: String = row.get(2)?;
-    let created_at_str: String = row.get(9)?;
+    let created_at_str: String = row.get(14)?;
 
     Ok(Snapshot {
         id: Some(row.get(0)?),
@@ -481,6 +502,11 @@ fn parse_snapshot_row(row: &rusqlite::Row) -> SqliteResult<Snapshot> {
         changed_files: row.get(6)?,
         diff_summary: row.get(7)?,
         metadata: row.get(8)?,
+        git_commit_hash: row.get(9)?,
+        git_tag: row.get(10)?,
+        git_branch: row.get(11)?,
+        version_major: row.get(12)?,
+        version_minor: row.get(13)?,
         created_at: created_at_str.parse().unwrap_or_else(|_| Utc::now()),
     })
 }

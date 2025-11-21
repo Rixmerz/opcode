@@ -135,45 +135,54 @@ pub async fn resolve_error_command(
     resolve_error(&conn, error_id).map_err(|e| e.to_string())
 }
 
-/// Crea un snapshot master (user intent)
+/// Crea un snapshot master (user intent) con Git real
+/// Se ejecuta automáticamente ANTES de enviar un mensaje al agente
 #[tauri::command]
 pub async fn create_master_snapshot(
     chunking_state: State<'_, ChunkingState>,
     project_path: String,
     user_message: String,
-    changed_files: Vec<String>,
-    parent_snapshot_id: Option<i64>,
 ) -> Result<i64, String> {
     let conn = chunking_state.0.lock().map_err(|e| e.to_string())?;
-    crate::chunking::snapshots::create_master_snapshot(
+    crate::chunking::snapshots::create_master_snapshot_with_git(
         &conn,
         &project_path,
         &user_message,
-        &changed_files,
-        parent_snapshot_id,
     )
     .map_err(|e| e.to_string())
 }
 
-/// Crea un snapshot agent (agent execution)
+/// Crea un snapshot agent (agent execution) con Git real en rama paralela
+/// Se ejecuta automáticamente DESPUÉS de que el agente completa una ejecución
 #[tauri::command]
 pub async fn create_agent_snapshot(
     chunking_state: State<'_, ChunkingState>,
     project_path: String,
+    master_snapshot_id: i64,
     message: String,
-    changed_files: Vec<String>,
-    parent_snapshot_id: Option<i64>,
+    changed_files: Option<Vec<String>>,
 ) -> Result<i64, String> {
     let conn = chunking_state.0.lock().map_err(|e| e.to_string())?;
-    crate::chunking::snapshots::create_agent_snapshot(
+    crate::chunking::snapshots::create_agent_snapshot_with_git(
         &conn,
         &project_path,
+        master_snapshot_id,
         &message,
-        &changed_files,
-        parent_snapshot_id,
-        None,
+        changed_files,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Retrocede la rama master a un snapshot anterior (time travel)
+/// Usa git reset --hard y elimina snapshots master posteriores
+#[tauri::command]
+pub async fn rewind_master_snapshot(
+    chunking_state: State<'_, ChunkingState>,
+    snapshot_id: i64,
+) -> Result<(), String> {
+    let conn = chunking_state.0.lock().map_err(|e| e.to_string())?;
+    crate::chunking::snapshots::rewind_master_to_snapshot_with_git(&conn, snapshot_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Propone una regla de negocio para validación
