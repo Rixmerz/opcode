@@ -1,14 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { 
+import {
   FolderOpen,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import type { Project } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 interface ProjectListProps {
   /**
@@ -91,6 +94,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 }) => {
   const [showAll, setShowAll] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [indexedProjects, setIndexedProjects] = useState<Set<string>>(new Set());
   
   // Determine how many projects to show
   const projectsPerPage = showAll ? 10 : 5;
@@ -110,6 +114,36 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     setShowAll(false);
     setCurrentPage(1);
   };
+
+  // Check which projects are indexed
+  useEffect(() => {
+    const checkIndexStatus = async () => {
+      const indexed = new Set<string>();
+
+      for (const project of projects) {
+        try {
+          // Try to search for chunks in this project
+          const chunks = await api.searchChunks({
+            project_path: project.path,
+            limit: 1, // Just check if any chunks exist
+          });
+
+          if (chunks && chunks.length > 0) {
+            indexed.add(project.id);
+          }
+        } catch (error) {
+          // Project not indexed or error occurred
+          console.debug(`Project ${project.id} not indexed or error checking:`, error);
+        }
+      }
+
+      setIndexedProjects(indexed);
+    };
+
+    if (projects.length > 0) {
+      checkIndexStatus();
+    }
+  }, [projects]);
 
   return (
     <div className={cn("h-full overflow-y-auto", className)}>
@@ -179,12 +213,20 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   onClick={() => onProjectClick(project)}
                   whileTap={{ scale: 0.97 }}
                   transition={{ duration: 0.15 }}
-                  className="w-full text-left px-3 py-2 rounded-md hover:bg-accent/50 transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-md hover:bg-accent/50 transition-colors flex items-center justify-between gap-2"
                 >
-                  <span className="text-body-small font-medium">
-                    {getProjectName(project.path)}
-                  </span>
-                  <span className="text-caption text-muted-foreground font-mono text-right" style={{ minWidth: '200px' }}>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-body-small font-medium truncate">
+                      {getProjectName(project.path)}
+                    </span>
+                    {indexedProjects.has(project.id) && (
+                      <Badge variant="secondary" className="flex items-center gap-1 text-xs px-1.5 py-0.5 shrink-0">
+                        <Database className="h-3 w-3" />
+                        Indexed
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-caption text-muted-foreground font-mono text-right shrink-0" style={{ minWidth: '200px' }}>
                     {getDisplayPath(project.path, 35)}
                   </span>
                 </motion.button>

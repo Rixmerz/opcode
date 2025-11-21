@@ -9,10 +9,6 @@ import {
   Zap,
   Square,
   Brain,
-  Lightbulb,
-  Cpu,
-  Rocket,
-  
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -77,9 +73,9 @@ export interface FloatingPromptInputRef {
 }
 
 /**
- * Thinking mode type definition
+ * Thinking mode type definition - Simplified to Normal/Thinking toggle
  */
-type ThinkingMode = "auto" | "think" | "think_hard" | "think_harder" | "ultrathink";
+type ThinkingMode = "normal" | "thinking";
 
 /**
  * Thinking mode configuration
@@ -88,86 +84,45 @@ type ThinkingModeConfig = {
   id: ThinkingMode;
   name: string;
   description: string;
-  level: number; // 0-4 for visual indicator
   phrase?: string; // The phrase to append
   icon: React.ReactNode;
   color: string;
-  shortName: string;
+  enabled: boolean; // For toggle visual state
 };
 
 const THINKING_MODES: ThinkingModeConfig[] = [
   {
-    id: "auto",
-    name: "Auto",
-    description: "Let Claude decide",
-    level: 0,
+    id: "normal",
+    name: "Normal",
+    description: "Standard response mode",
     icon: <Sparkles className="h-3.5 w-3.5" />,
     color: "text-muted-foreground",
-    shortName: "A"
+    enabled: false
   },
   {
-    id: "think",
-    name: "Think",
-    description: "Basic reasoning",
-    level: 1,
+    id: "thinking",
+    name: "Thinking",
+    description: "Extended reasoning mode",
     phrase: "think",
-    icon: <Lightbulb className="h-3.5 w-3.5" />,
-    color: "text-primary",
-    shortName: "T"
-  },
-  {
-    id: "think_hard",
-    name: "Think Hard",
-    description: "Deeper analysis",
-    level: 2,
-    phrase: "think hard",
     icon: <Brain className="h-3.5 w-3.5" />,
     color: "text-primary",
-    shortName: "T+"
-  },
-  {
-    id: "think_harder",
-    name: "Think Harder",
-    description: "Extensive reasoning",
-    level: 3,
-    phrase: "think harder",
-    icon: <Cpu className="h-3.5 w-3.5" />,
-    color: "text-primary",
-    shortName: "T++"
-  },
-  {
-    id: "ultrathink",
-    name: "Ultrathink",
-    description: "Maximum computation",
-    level: 4,
-    phrase: "ultrathink",
-    icon: <Rocket className="h-3.5 w-3.5" />,
-    color: "text-primary",
-    shortName: "Ultra"
+    enabled: true
   }
 ];
 
 /**
- * ThinkingModeIndicator component - Shows visual indicator bars for thinking level
+ * ThinkingModeToggle component - Shows a simple toggle for thinking mode
  */
-const ThinkingModeIndicator: React.FC<{ level: number; color?: string }> = ({ level, color: _color }) => {
-  const getBarColor = (barIndex: number) => {
-    if (barIndex > level) return "bg-muted";
-    return "bg-primary";
-  };
-  
+const ThinkingModeToggle: React.FC<{ enabled: boolean }> = ({ enabled }) => {
   return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className={cn(
-            "w-1 h-3 rounded-full transition-all duration-200",
-            getBarColor(i),
-            i <= level && "shadow-sm"
-          )}
-        />
-      ))}
+    <div className={cn(
+      "flex items-center justify-center w-8 h-4 rounded-full transition-colors",
+      enabled ? "bg-primary" : "bg-muted"
+    )}>
+      <div className={cn(
+        "w-3 h-3 rounded-full bg-background transition-transform",
+        enabled ? "translate-x-2" : "-translate-x-2"
+      )} />
     </div>
   );
 };
@@ -234,7 +189,7 @@ const FloatingPromptInputInner = (
 ) => {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<"haiku" | "sonnet" | "opus">(defaultModel);
-  const [selectedThinkingMode, setSelectedThinkingMode] = useState<ThinkingMode>("auto");
+  const [selectedThinkingMode, setSelectedThinkingMode] = useState<ThinkingMode>("normal");
   const [isExpanded, setIsExpanded] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [thinkingModePickerOpen, setThinkingModePickerOpen] = useState(false);
@@ -708,7 +663,7 @@ const FloatingPromptInputInner = (
     if (prompt.trim() && !disabled) {
       let finalPrompt = prompt.trim();
 
-      // Append thinking phrase if not auto mode
+      // Append thinking phrase if in thinking mode
       const thinkingMode = THINKING_MODES.find(m => m.id === selectedThinkingMode);
       if (thinkingMode && thinkingMode.phrase) {
         finalPrompt = `${finalPrompt}.\n\n${thinkingMode.phrase}.`;
@@ -989,13 +944,13 @@ const FloatingPromptInputInner = (
                                 <span className={THINKING_MODES.find(m => m.id === selectedThinkingMode)?.color}>
                                   {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.icon}
                                 </span>
-                                <ThinkingModeIndicator 
-                                  level={THINKING_MODES.find(m => m.id === selectedThinkingMode)?.level || 0} 
+                                <ThinkingModeToggle
+                                  enabled={THINKING_MODES.find(m => m.id === selectedThinkingMode)?.enabled || false}
                                 />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p className="font-medium">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Auto"}</p>
+                              <p className="font-medium">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Normal"}</p>
                               <p className="text-xs text-muted-foreground">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.description}</p>
                             </TooltipContent>
                           </Tooltip>
@@ -1026,7 +981,7 @@ const FloatingPromptInputInner = (
                                   {mode.description}
                                 </div>
                               </div>
-                              <ThinkingModeIndicator level={mode.level} />
+                              <ThinkingModeToggle enabled={mode.enabled} />
                             </button>
                           ))}
                         </div>
@@ -1174,14 +1129,14 @@ const FloatingPromptInputInner = (
                                 {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.icon}
                               </span>
                               <span className="text-[10px] font-semibold opacity-70">
-                                {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.shortName}
+                                {selectedThinkingMode === "thinking" ? "T" : "N"}
                               </span>
                               <ChevronUp className="h-3 w-3 ml-0.5 opacity-50" />
                             </Button>
                           </motion.div>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p className="text-xs font-medium">Thinking: {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Auto"}</p>
+                          <p className="text-xs font-medium">Thinking: {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Normal"}</p>
                           <p className="text-xs text-muted-foreground">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.description}</p>
                         </TooltipContent>
                       </Tooltip>
@@ -1212,7 +1167,7 @@ const FloatingPromptInputInner = (
                             {mode.description}
                           </div>
                         </div>
-                        <ThinkingModeIndicator level={mode.level} />
+                        <ThinkingModeToggle enabled={mode.enabled} />
                       </button>
                     ))}
                   </div>
