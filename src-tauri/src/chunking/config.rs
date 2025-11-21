@@ -31,7 +31,7 @@ pub fn generate_config_chunks(
         updated_at: Utc::now(),
     };
 
-    upsert_chunk(conn, &chunk)?;
+    upsert_chunk(conn, &chunk, None)?;
     Ok(1)
 }
 

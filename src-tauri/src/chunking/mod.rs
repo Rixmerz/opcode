@@ -11,13 +11,13 @@ pub mod storage;
 pub mod tests;
 pub mod types;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 use ignore::WalkBuilder;
 use rusqlite::Connection;
 use std::path::Path;
 
-use storage::{calculate_content_hash, init_chunk_database, upsert_chunk};
+use storage::init_chunk_database;
 use types::{ChunkingOptions, ChunkingResult, ChunkType};
 
 /// Orquestador principal del sistema de chunking
@@ -164,7 +164,98 @@ impl ChunkingOrchestrator {
         })
     }
 
+    /// Reindexación incremental: solo procesa los archivos modificados
+    /// Se ejecuta automáticamente después de crear snapshots
+    pub fn reindex_changed_files(
+        &self,
+        project_path: &str,
+        changed_files: &[String],
+        snapshot_id: Option<i64>,
+    ) -> Result<ChunkingResult> {
+        let started_at = Utc::now();
+        let mut chunks_created = 0;
+        let mut chunks_updated = 0;
+        let mut relationships_created = 0;
+        let mut errors = Vec::new();
+
+        println!(
+            "[Chunking] Incremental reindex: {} files changed in project {}",
+            changed_files.len(),
+            project_path
+        );
+
+        // Procesar solo los archivos que cambiaron
+        for file_path in changed_files {
+            let full_path = Path::new(project_path).join(file_path);
+
+            // Skip if file doesn't exist (deleted files)
+            if !full_path.exists() {
+                println!("[Chunking] Skipping deleted file: {}", file_path);
+                continue;
+            }
+
+            // Read file content
+            match std::fs::read_to_string(&full_path) {
+                Ok(content) => {
+                    // Generate all chunk types for this file
+                    // RawSource chunk
+                    if let Ok(chunk) = raw_source::create_raw_source_chunk(&full_path, &content) {
+                        match storage::upsert_chunk(&self.conn, &chunk, snapshot_id) {
+                            Ok(created) => {
+                                if created {
+                                    chunks_created += 1;
+                                } else {
+                                    chunks_updated += 1;
+                                }
+                            }
+                            Err(e) => errors.push(e.to_string()),
+                        }
+                    }
+
+                    // AST chunks
+                    if let Ok(ast_chunks) = ast::create_ast_chunks(&full_path, &content) {
+                        for chunk in ast_chunks {
+                            match storage::upsert_chunk(&self.conn, &chunk, snapshot_id) {
+                                Ok(created) => {
+                                    if created {
+                                        chunks_created += 1;
+                                    } else {
+                                        chunks_updated += 1;
+                                    }
+                                }
+                                Err(e) => errors.push(e.to_string()),
+                            }
+                        }
+                    }
+
+                    // Other chunk types as needed...
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to read {}: {}", file_path, e));
+                }
+            }
+        }
+
+        let completed_at = Utc::now();
+
+        println!(
+            "[Chunking] Incremental reindex completed: {} created, {} updated, {} errors",
+            chunks_created, chunks_updated, errors.len()
+        );
+
+        Ok(ChunkingResult {
+            project_path: project_path.to_string(),
+            chunks_created,
+            chunks_updated,
+            relationships_created,
+            errors,
+            started_at,
+            completed_at,
+        })
+    }
+
     /// Crea un snapshot master del estado actual del proyecto
+    /// Automáticamente reindexingdex los archivos modificados
     pub fn create_user_snapshot(
         &self,
         project_path: &str,
@@ -172,14 +263,49 @@ impl ChunkingOrchestrator {
         _changed_files: &[String],
         _parent_snapshot_id: Option<i64>,
     ) -> Result<i64> {
-        snapshots::create_master_snapshot_with_git(
+        // Crear snapshot y obtener archivos modificados desde Git
+        let snapshot_id = snapshots::create_master_snapshot_with_git(
             &self.conn,
             project_path,
             user_message,
-        )
+        )?;
+
+        // Obtener archivos modificados del snapshot recién creado
+        let changed_files: Vec<String> = self.conn
+            .query_row(
+                "SELECT changed_files FROM snapshots WHERE id = ?1",
+                rusqlite::params![snapshot_id],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+
+        // Reindexar archivos modificados automáticamente
+        if !changed_files.is_empty() {
+            println!(
+                "[Chunking] Auto-reindexing {} changed files after master snapshot",
+                changed_files.len()
+            );
+
+            match self.reindex_changed_files(project_path, &changed_files, Some(snapshot_id)) {
+                Ok(result) => {
+                    println!(
+                        "[Chunking] Auto-reindex complete: {} created, {} updated",
+                        result.chunks_created, result.chunks_updated
+                    );
+                }
+                Err(e) => {
+                    log::warn!("Auto-reindex failed: {}", e);
+                }
+            }
+        }
+
+        Ok(snapshot_id)
     }
 
     /// Crea un snapshot agent de un cambio realizado por el agente
+    /// Automáticamente reindexingdex los archivos modificados
     pub fn create_agent_snapshot(
         &self,
         project_path: &str,
@@ -187,13 +313,36 @@ impl ChunkingOrchestrator {
         changed_files: &[String],
         master_snapshot_id: i64,
     ) -> Result<i64> {
-        snapshots::create_agent_snapshot_with_git(
+        // Crear snapshot agent
+        let snapshot_id = snapshots::create_agent_snapshot_with_git(
             &self.conn,
             project_path,
             master_snapshot_id,
             message,
             Some(changed_files.to_vec()),
-        )
+        )?;
+
+        // Reindexar archivos modificados automáticamente
+        if !changed_files.is_empty() {
+            println!(
+                "[Chunking] Auto-reindexing {} changed files after agent snapshot",
+                changed_files.len()
+            );
+
+            match self.reindex_changed_files(project_path, changed_files, Some(snapshot_id)) {
+                Ok(result) => {
+                    println!(
+                        "[Chunking] Auto-reindex complete: {} created, {} updated",
+                        result.chunks_created, result.chunks_updated
+                    );
+                }
+                Err(e) => {
+                    log::warn!("Auto-reindex failed: {}", e);
+                }
+            }
+        }
+
+        Ok(snapshot_id)
     }
 
     /// Propone una regla de negocio para validación del usuario

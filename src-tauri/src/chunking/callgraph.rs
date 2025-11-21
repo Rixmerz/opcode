@@ -54,7 +54,7 @@ pub fn generate_callgraph_chunks(
         updated_at: Utc::now(),
     };
 
-    upsert_chunk(conn, &chunk)?;
+    upsert_chunk(conn, &chunk, None)?;
     Ok(1)
 }
 

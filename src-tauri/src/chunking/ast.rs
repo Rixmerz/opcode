@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::Connection;
 use std::path::Path;
-use tree_sitter::{Language, Parser, TreeCursor};
+use tree_sitter::{Language, Parser};
 
 /// Genera chunks de AST comprimido por archivo
 pub fn generate_ast_chunks(
@@ -55,8 +55,69 @@ pub fn generate_ast_chunks(
         updated_at: Utc::now(),
     };
 
-    upsert_chunk(conn, &chunk)?;
+    upsert_chunk(conn, &chunk, None)?;
     Ok(1)
+}
+
+/// Crea chunks AST para un archivo específico (usado en reindexación incremental)
+pub fn create_ast_chunks(file_path: &Path, content: &str) -> Result<Vec<Chunk>> {
+    let file_path_str = file_path.to_str().context("Invalid file path")?;
+
+    let language = detect_language(file_path_str)?;
+    let mut parser = Parser::new();
+    parser
+        .set_language(&language)
+        .context("Failed to set language")?;
+
+    let tree = parser
+        .parse(content, None)
+        .context("Failed to parse file")?;
+
+    let root = tree.root_node();
+
+    // Generar representación comprimida del AST
+    let mut ast_repr = String::new();
+    let mut max_depth = 0;
+    let mut node_count = 0;
+    let has_syntax_errors = root.has_error();
+
+    serialize_ast_node(&root, &mut ast_repr, 0, &mut max_depth, &mut node_count);
+
+    let content_hash = calculate_content_hash(&ast_repr);
+
+    let metadata = AstMetadata {
+        language: get_language_name(&language),
+        node_count,
+        max_depth,
+        has_syntax_errors,
+    };
+
+    let project_path = file_path
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let rel_path = file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let chunk = Chunk {
+        id: None,
+        project_path,
+        chunk_type: ChunkType::Ast,
+        file_path: Some(rel_path),
+        entity_name: None,
+        content: ast_repr,
+        content_hash,
+        metadata: Some(serde_json::to_string(&metadata)?),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    Ok(vec![chunk])
 }
 
 /// Serializa un nodo del AST de forma comprimida

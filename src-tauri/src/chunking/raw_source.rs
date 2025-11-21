@@ -64,7 +64,7 @@ pub fn generate_raw_source_chunks(
                     updated_at: Utc::now(),
                 };
 
-                match upsert_chunk(conn, &chunk) {
+                match upsert_chunk(conn, &chunk, None) {
                     Ok(_) => chunks_created += 1,
                     Err(e) => {
                         eprintln!("Failed to insert chunk for {}: {}", path.display(), e);
@@ -78,6 +78,36 @@ pub fn generate_raw_source_chunks(
     }
 
     Ok(chunks_created)
+}
+
+/// Crea un chunk de raw source para un archivo específico (usado en reindexación incremental)
+pub fn create_raw_source_chunk(file_path: &Path, content: &str) -> Result<Chunk> {
+    let project_path = file_path
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let rel_path = file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let content_hash = calculate_content_hash(content);
+
+    Ok(Chunk {
+        id: None,
+        project_path,
+        chunk_type: ChunkType::RawSource,
+        file_path: Some(rel_path),
+        entity_name: None,
+        content: content.to_string(),
+        content_hash,
+        metadata: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    })
 }
 
 /// Verifica si un archivo es un archivo de código

@@ -50,7 +50,7 @@ pub fn generate_test_chunks(
         updated_at: Utc::now(),
     };
 
-    upsert_chunk(conn, &chunk)?;
+    upsert_chunk(conn, &chunk, None)?;
     Ok(1)
 }
 

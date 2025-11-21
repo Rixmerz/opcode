@@ -90,7 +90,7 @@ pub fn generate_commit_chunks(
             updated_at: Utc::now(),
         };
 
-        upsert_chunk(conn, &chunk)?;
+        upsert_chunk(conn, &chunk, None)?;
         chunks_created += 1;
     }
 

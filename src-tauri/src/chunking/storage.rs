@@ -130,6 +130,14 @@ pub fn init_chunk_database(conn: &Connection) -> SqliteResult<()> {
     let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN version_major INTEGER NOT NULL DEFAULT 1", []);
     let _ = conn.execute("ALTER TABLE snapshots ADD COLUMN version_minor INTEGER", []);
 
+    // Migration: Add snapshot_id to chunks table for linking chunks with snapshots
+    let _ = conn.execute("ALTER TABLE chunks ADD COLUMN snapshot_id INTEGER", []);
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunks_snapshot ON chunks(snapshot_id)",
+        [],
+    )?;
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_path)",
         [],
@@ -191,45 +199,46 @@ pub fn calculate_content_hash(content: &str) -> String {
 }
 
 /// Inserta o actualiza un chunk
-pub fn upsert_chunk(conn: &Connection, chunk: &Chunk) -> Result<i64> {
+/// Retorna (created: bool) - true si se creó nuevo, false si se actualizó existente
+pub fn upsert_chunk(conn: &Connection, chunk: &Chunk, snapshot_id: Option<i64>) -> Result<bool> {
     let chunk_type_str = chunk.chunk_type.as_str();
     let now = Utc::now().to_rfc3339();
 
-    // Intentar insertar, si ya existe (por hash) actualizar
-    let result = conn.execute(
-        "INSERT INTO chunks (project_path, chunk_type, file_path, entity_name, content, content_hash, metadata, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-         ON CONFLICT(content_hash) DO UPDATE SET
-            updated_at = ?9,
-            metadata = ?7",
-        params![
-            &chunk.project_path,
-            chunk_type_str,
-            &chunk.file_path,
-            &chunk.entity_name,
-            &chunk.content,
-            &chunk.content_hash,
-            &chunk.metadata,
-            &now,
-            &now,
-        ],
-    );
+    // Check if chunk already exists
+    let existing: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM chunks WHERE content_hash = ?1",
+            params![&chunk.content_hash],
+            |row| row.get(0),
+        )
+        .ok();
 
-    match result {
-        Ok(_) => Ok(conn.last_insert_rowid()),
-        Err(e) => {
-            // Si falló por conflict, obtener el ID existente
-            if e.to_string().contains("UNIQUE") {
-                let id: i64 = conn.query_row(
-                    "SELECT id FROM chunks WHERE content_hash = ?1",
-                    params![&chunk.content_hash],
-                    |row| row.get(0),
-                )?;
-                Ok(id)
-            } else {
-                Err(e.into())
-            }
-        }
+    if let Some(_id) = existing {
+        // Update existing chunk
+        conn.execute(
+            "UPDATE chunks SET updated_at = ?1, metadata = ?2, snapshot_id = ?3 WHERE content_hash = ?4",
+            params![&now, &chunk.metadata, snapshot_id, &chunk.content_hash],
+        )?;
+        Ok(false) // Updated, not created
+    } else {
+        // Insert new chunk
+        conn.execute(
+            "INSERT INTO chunks (project_path, chunk_type, file_path, entity_name, content, content_hash, metadata, snapshot_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &chunk.project_path,
+                chunk_type_str,
+                &chunk.file_path,
+                &chunk.entity_name,
+                &chunk.content,
+                &chunk.content_hash,
+                &chunk.metadata,
+                snapshot_id,
+                &now,
+                &now,
+            ],
+        )?;
+        Ok(true) // Created new
     }
 }
 
