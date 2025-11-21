@@ -2,6 +2,7 @@
 
 // Declare modules
 pub mod checkpoint;
+pub mod chunking;
 pub mod claude_binary;
 pub mod commands;
 pub mod process;

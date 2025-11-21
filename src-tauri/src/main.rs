@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod checkpoint;
+mod chunking;
 mod claude_binary;
 mod commands;
 mod process;
@@ -40,6 +41,12 @@ use commands::proxy::{apply_proxy_settings, get_proxy_settings, save_proxy_setti
 use commands::storage::{
     storage_delete_row, storage_execute_sql, storage_insert_row, storage_list_tables,
     storage_read_table, storage_reset_database, storage_update_row,
+};
+use commands::chunking::{
+    create_agent_snapshot, create_master_snapshot, get_pending_business_rules,
+    get_project_errors, get_project_snapshots, init_chunking_system, log_error_command,
+    process_project_chunks, propose_business_rule_command, resolve_error_command,
+    search_chunks, validate_business_rule_command, ChunkingState,
 };
 use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
@@ -119,6 +126,11 @@ fn main() {
             // Re-open the connection for the app to manage
             let conn = init_database(&app.handle()).expect("Failed to initialize agents database");
             app.manage(AgentDb(Mutex::new(conn)));
+
+            // Initialize chunking system
+            let chunking_conn = init_chunking_system(&app.handle())
+                .expect("Failed to initialize chunking database");
+            app.manage(ChunkingState(Mutex::new(chunking_conn)));
 
             // Initialize checkpoint state
             let checkpoint_state = CheckpointState::new();
@@ -289,6 +301,18 @@ fn main() {
             // Proxy Settings
             get_proxy_settings,
             save_proxy_settings,
+            // Chunking System
+            process_project_chunks,
+            search_chunks,
+            get_pending_business_rules,
+            validate_business_rule_command,
+            get_project_snapshots,
+            get_project_errors,
+            resolve_error_command,
+            create_master_snapshot,
+            create_agent_snapshot,
+            propose_business_rule_command,
+            log_error_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

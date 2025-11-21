@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod chunking;
 pub mod claude;
 pub mod mcp;
 pub mod proxy;
